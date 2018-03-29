@@ -1,4 +1,6 @@
 provider "aws" {
+  shared_credentials_file = "${var.creds_file}"
+  profile                 = "${var.aws_profile}"
   region = "${var.region}"
 }
 
@@ -23,7 +25,7 @@ resource "aws_instance" "web" {
   ]
 
   tags {
-    Name = "web-${format("%03d", count.index + 1)}"
+    Name  = "web-${format("%03d", count.index + 1)}"
     Owner = "${element(var.owner_tag,count.index)}"
   }
 
