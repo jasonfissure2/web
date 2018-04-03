@@ -1,6 +1,4 @@
 provider "aws" {
-  shared_credentials_file = "${var.creds_file}"
-  profile                 = "${var.aws_profile}"
   region = "${var.region}"
 }
 
@@ -11,13 +9,21 @@ module "vpc" {
   public_subnet = "10.0.1.0/24"
 }
 
+data "template_file" "index" {
+  count    = "${length(var.instance_ips)}"
+  template = "${file("files/index.html.tpl")}"
+
+  vars {
+    hostname = "web-${format("%03d", count.index + 1)}"
+  }
+}
+
 resource "aws_instance" "web" {
   ami                         = "${lookup(var.ami, var.region)}"
   instance_type               = "${var.instance_type}"
   key_name                    = "${var.key_name}"
   subnet_id                   = "${module.vpc.public_subnet_id}"
   private_ip                  = "${var.instance_ips[count.index]}"
-  user_data                   = "${file("files/web_bootstrap.sh")}"
   associate_public_ip_address = true
 
   vpc_security_group_ids = [
@@ -25,16 +31,34 @@ resource "aws_instance" "web" {
   ]
 
   tags {
-    Name  = "web-${format("%03d", count.index + 1)}"
-    Owner = "${element(var.owner_tag,count.index)}"
+    Name = "web-${format("%03d", count.index + 1)}"
   }
 
   count = "${length(var.instance_ips)}"
+
+  connection {
+    user        = "ubuntu"
+    private_key = "${file(var.key_path)}"
+  }
+
+  provisioner "file" {
+    content     = "${element(data.template_file.index.*.rendered, count.index)}"
+    destination = "/tmp/index.html"
+  }
+
+  provisioner "remote-exec" {
+    script = "files/bootstrap_puppet.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo mv /tmp/index.html /var/www/html/index.html",
+    ]
+  }
 }
 
 resource "aws_elb" "web" {
-  name = "web-elb"
-
+  name            = "web-elb"
   subnets         = ["${module.vpc.public_subnet_id}"]
   security_groups = ["${aws_security_group.web_inbound_sg.id}"]
 
@@ -45,7 +69,6 @@ resource "aws_elb" "web" {
     lb_protocol       = "http"
   }
 
-  # The instances are registered automatically
   instances = ["${aws_instance.web.*.id}"]
 }
 
