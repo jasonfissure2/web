@@ -40,3 +40,13 @@ variable "instance_ips" {
   description = "The IPs to use for our instances"
   default     = ["10.0.1.20", "10.0.1.21"]
 }
+
+variable "prefix" {
+  description = "The name of our organization or domain for S3 bucket name"
+  default     = "examplecom"
+}
+
+variable "environment" {
+  description = "the name of the environment"
+  default     = "web"
+}
